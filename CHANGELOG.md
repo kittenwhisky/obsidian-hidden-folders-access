@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1](https://github.com/dsebastien/obsidian-hidden-folders-access/compare/1.0.0...1.0.1) (2026-05-13)
+
 ## [1.0.0](https://github.com/dsebastien/obsidian-hidden-folders-access/compare/0.2.0...1.0.0) (2026-05-13)
 
 ## [0.2.0](https://github.com/dsebastien/obsidian-hidden-folders-access/compare/0.1.0...0.2.0) (2026-04-22)
@@ -20,6 +22,7 @@ All notable changes to this project will be documented in this file.
 ## 0.1.0 (2026-04-15)
 
 Initial release. See [docs/release-notes.md](./docs/release-notes.md) for details.
+
 
 
 
