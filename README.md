@@ -16,27 +16,33 @@ This plugin solves the problem without touching the filesystem: you pick which h
 - Clean disable: turning a folder off (or disabling the plugin) removes every injected entry — nothing on disk is touched.
 - Desktop-only, cross-platform (Linux / macOS / Windows).
 
-## Install
+## Installation
 
-The plugin is not yet in the community catalog. Pick one of the two options below.
+### Community plugins (recommended)
 
-### Recommended: via BRAT
+1. In Obsidian, go to **Settings → Community plugins**.
+2. Disable **Restricted mode** if it's enabled.
+3. Select **Browse**, search for **Hidden Folders Access**, install it, then enable it.
 
-[BRAT](https://github.com/TfTHacker/obsidian42-brat) (Beta Reviewers Auto-update Tool) installs plugins straight from a GitHub repo and keeps them updated.
+You can also browse the catalog on the [Obsidian Community](https://community.obsidian.md/) website.
 
-1. Install **Obsidian42 - BRAT** from **Settings → Community plugins → Browse** and enable it.
-2. Open the command palette and run **BRAT: Add a beta plugin for testing**.
-3. Paste the repository URL: `https://github.com/dsebastien/obsidian-hidden-folders-access`.
-4. Select the latest version (or leave it on "Latest version") and confirm. BRAT downloads and installs the plugin.
-5. Enable **Hidden Folders Access** in **Settings → Community plugins**.
+### Manual installation
 
-BRAT will check for new releases automatically — no more manual updates until the plugin lands in the official catalog.
-
-### Manual
+If the plugin isn't listed in the community catalog yet (or you want a specific version):
 
 1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/dsebastien/obsidian-hidden-folders-access/releases).
 2. Copy them into `<Vault>/.obsidian/plugins/hidden-folders-access/`.
 3. Reload Obsidian and enable **Hidden Folders Access** in **Settings → Community plugins**.
+
+### BRAT (bleeding edge)
+
+[BRAT](https://github.com/TfTHacker/obsidian42-brat) (Beta Reviewers Auto-update Tool) installs plugins straight from a GitHub repo and keeps them updated automatically. Use this if you want the latest commits — **things might break**.
+
+1. Install **Obsidian42 - BRAT** from **Settings → Community plugins → Browse** and enable it.
+2. Run **BRAT: Add a beta plugin for testing** from the command palette.
+3. Paste `https://github.com/dsebastien/obsidian-hidden-folders-access`.
+4. Select the latest version and confirm.
+5. Enable **Hidden Folders Access** in **Settings → Community plugins**.
 
 ## Use
 
