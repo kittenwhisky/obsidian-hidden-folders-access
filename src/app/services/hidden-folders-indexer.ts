@@ -33,7 +33,8 @@ interface PatchMemo {
 const hasFsENOENT = (err: unknown): boolean =>
     typeof err === 'object' && err !== null && (err as { code?: string }).code === 'ENOENT'
 
-const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
+const yieldToEventLoop = (): Promise<void> =>
+    new Promise((resolve) => window.setTimeout(resolve, 0))
 
 /**
  * Makes a set of hidden root-level folders visible to Obsidian's vault cache,
