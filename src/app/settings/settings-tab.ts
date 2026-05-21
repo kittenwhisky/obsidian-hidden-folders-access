@@ -1,9 +1,16 @@
-import { App, ButtonComponent, Notice, PluginSettingTab, Setting } from 'obsidian'
+import { App, ButtonComponent, Notice, PluginSettingTab, Setting, setIcon } from 'obsidian'
 import type { HiddenFoldersAccessPlugin } from '../plugin'
 import { DEFAULT_ALLOWED_EXTENSIONS } from '../types/plugin-settings.intf'
 import { parseExtensions } from '../../utils/extensions'
 import { log } from '../../utils/log'
 import { BUY_ME_A_COFFEE_BADGE_DATA_URL } from '../assets/buy-me-a-coffee'
+
+const INDENT_REM = 1.25
+
+const basenameOf = (path: string): string => {
+    const slash = path.lastIndexOf('/')
+    return slash === -1 ? path : path.slice(slash + 1)
+}
 
 export class HiddenFoldersAccessSettingsTab extends PluginSettingTab {
     plugin: HiddenFoldersAccessPlugin
@@ -28,16 +35,16 @@ export class HiddenFoldersAccessSettingsTab extends PluginSettingTab {
 
         const desc = containerEl.createDiv()
         desc.createEl('p', {
-            text: 'Select which hidden root-level folders (names starting with a dot) Obsidian should index. Toggling a folder on kicks off indexing in the background — you can close this tab and keep working while it runs. A notification updates live and disappears when the folder is fully indexed.'
+            text: 'Select which hidden folders (names starting with a dot) Obsidian should index. Toggling a folder on kicks off indexing in the background — you can close this tab and keep working while it runs. A notification updates live and disappears when the folder is fully indexed.'
         })
         desc.createEl('p', {
-            text: 'Only folders at the vault root are listed. The Obsidian configuration folder is always excluded.'
+            text: 'Browse the vault as a tree: click any regular folder to expand it and reveal nested hidden folders. The Obsidian configuration folder, .git, .trash and node_modules are always excluded.'
         })
 
         new Setting(containerEl)
             .setName('Refresh folder list')
             .setDesc(
-                'Re-scan the vault root to pick up newly created hidden folders. This does not re-index folders that are already enabled — it only refreshes the list below.'
+                'Re-scan to pick up newly created folders. This does not re-index folders that are already enabled — it only refreshes the list below. Collapsed branches reset to closed.'
             )
             .addButton((button) =>
                 button
@@ -51,12 +58,12 @@ export class HiddenFoldersAccessSettingsTab extends PluginSettingTab {
     }
 
     private async renderFolderList(containerEl: HTMLElement): Promise<void> {
-        const listContainer = containerEl.createDiv()
-        const loading = listContainer.createEl('p', { text: 'Scanning vault root…' })
+        const tree = containerEl.createDiv({ cls: 'hfa-tree' })
+        const loading = tree.createEl('p', { text: 'Scanning vault root…' })
 
-        let hiddenFolders: string[]
+        let listing: { dotFolders: string[]; regularFolders: string[] }
         try {
-            hiddenFolders = await this.plugin.indexer.listHiddenRootFolders()
+            listing = await this.plugin.indexer.listChildFolders('')
         } catch (err) {
             log('Failed to list hidden folders', 'error', err)
             loading.setText('Failed to list hidden folders. Check the developer console.')
@@ -65,9 +72,10 @@ export class HiddenFoldersAccessSettingsTab extends PluginSettingTab {
 
         loading.remove()
 
-        if (hiddenFolders.length === 0) {
-            listContainer.createEl('p', {
-                text: 'No hidden folders found at the vault root.'
+        if (listing.dotFolders.length === 0 && listing.regularFolders.length === 0) {
+            tree.createEl('p', {
+                text: 'No folders found at the vault root.',
+                cls: 'hfa-tree-empty'
             })
             return
         }
@@ -77,26 +85,112 @@ export class HiddenFoldersAccessSettingsTab extends PluginSettingTab {
         // pick them up again if/when the folder reappears (restart, toggle,
         // rescan command).
 
-        for (const folder of hiddenFolders) {
-            new Setting(listContainer).setName(folder).addToggle((toggle) => {
-                toggle
-                    .setValue(this.plugin.settings.enabledFolders.includes(folder))
-                    .onChange((value) => {
-                        // Compute the new list from the latest persisted state,
-                        // not from a snapshot taken when the tab was rendered.
-                        const current = new Set(this.plugin.settings.enabledFolders)
-                        if (value) {
-                            current.add(folder)
-                        } else {
-                            current.delete(folder)
-                        }
-                        // Don't await: settings are saved and the background
-                        // task is spawned inside updateEnabledFolders. Blocking
-                        // here would freeze the toggle animation.
-                        void this.plugin.updateEnabledFolders([...current])
-                    })
-            })
+        this.renderTreeChildren(tree, listing, 0)
+    }
+
+    private renderTreeChildren(
+        container: HTMLElement,
+        listing: { dotFolders: string[]; regularFolders: string[] },
+        depth: number
+    ): void {
+        for (const fullPath of listing.dotFolders) {
+            this.renderDotFolderRow(container, fullPath, depth)
         }
+        for (const fullPath of listing.regularFolders) {
+            this.renderExpandableRow(container, fullPath, depth)
+        }
+    }
+
+    private renderDotFolderRow(container: HTMLElement, fullPath: string, depth: number): void {
+        const row = container.createDiv({ cls: 'hfa-tree-row' })
+        row.style.paddingLeft = `${depth * INDENT_REM}rem`
+
+        const setting = new Setting(row).setName(basenameOf(fullPath))
+        if (depth > 0) {
+            setting.setDesc(fullPath)
+        }
+        setting.addToggle((toggle) => {
+            toggle
+                .setValue(this.plugin.settings.enabledFolders.includes(fullPath))
+                .onChange((value) => {
+                    // Compute the new list from the latest persisted state,
+                    // not from a snapshot taken when the tab was rendered.
+                    const current = new Set(this.plugin.settings.enabledFolders)
+                    if (value) {
+                        current.add(fullPath)
+                    } else {
+                        current.delete(fullPath)
+                    }
+                    // Don't await: settings are saved and the background
+                    // task is spawned inside updateEnabledFolders. Blocking
+                    // here would freeze the toggle animation.
+                    void this.plugin.updateEnabledFolders([...current])
+                })
+        })
+    }
+
+    private renderExpandableRow(container: HTMLElement, fullPath: string, depth: number): void {
+        const row = container.createDiv({ cls: 'hfa-tree-row' })
+        row.style.paddingLeft = `${depth * INDENT_REM}rem`
+
+        const header = row.createEl('button', { cls: 'hfa-tree-header', type: 'button' })
+        const chevron = header.createSpan({ cls: 'hfa-chevron' })
+        setIcon(chevron, 'chevron-right')
+        header.createSpan({ cls: 'hfa-tree-name', text: basenameOf(fullPath) })
+
+        const childContainer = row.createDiv({ cls: 'hfa-tree-children is-collapsed' })
+
+        let loaded = false
+        header.addEventListener('click', () => {
+            const collapsed = childContainer.classList.contains('is-collapsed')
+            if (collapsed) {
+                if (!loaded) {
+                    loaded = true
+                    void this.expandInto(childContainer, fullPath, depth + 1)
+                }
+                childContainer.classList.remove('is-collapsed')
+                chevron.empty()
+                setIcon(chevron, 'chevron-down')
+            } else {
+                childContainer.classList.add('is-collapsed')
+                chevron.empty()
+                setIcon(chevron, 'chevron-right')
+            }
+        })
+    }
+
+    private async expandInto(
+        container: HTMLElement,
+        parentPath: string,
+        depth: number
+    ): Promise<void> {
+        const loading = container.createEl('p', {
+            text: `Scanning ${parentPath}…`,
+            cls: 'hfa-tree-empty'
+        })
+        loading.style.paddingLeft = `${depth * INDENT_REM}rem`
+
+        let listing: { dotFolders: string[]; regularFolders: string[] }
+        try {
+            listing = await this.plugin.indexer.listChildFolders(parentPath)
+        } catch (err) {
+            log(`Failed to list folder "${parentPath}"`, 'error', err)
+            loading.setText('Failed to list folder. Check the developer console.')
+            return
+        }
+
+        loading.remove()
+
+        if (listing.dotFolders.length === 0 && listing.regularFolders.length === 0) {
+            const empty = container.createEl('p', {
+                text: 'Empty.',
+                cls: 'hfa-tree-empty'
+            })
+            empty.style.paddingLeft = `${depth * INDENT_REM}rem`
+            return
+        }
+
+        this.renderTreeChildren(container, listing, depth)
     }
 
     private renderFileTypes(containerEl: HTMLElement): void {

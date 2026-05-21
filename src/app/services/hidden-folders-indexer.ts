@@ -37,6 +37,18 @@ const yieldToEventLoop = (): Promise<void> =>
     new Promise((resolve) => window.setTimeout(resolve, 0))
 
 /**
+ * Folder basenames that are never surfaced by the discovery UI, regardless of
+ * depth. The Obsidian config directory is excluded dynamically because users
+ * can rename it.
+ */
+const ALWAYS_EXCLUDED_NAMES: ReadonlySet<string> = new Set(['.git', '.trash', 'node_modules'])
+
+const basenameOf = (path: string): string => {
+    const slash = path.lastIndexOf('/')
+    return slash === -1 ? path : path.slice(slash + 1)
+}
+
+/**
  * Makes a set of hidden root-level folders visible to Obsidian's vault cache,
  * metadata cache and Bases by bypassing the built-in hidden-path filter that
  * the data adapter normally applies.
@@ -101,30 +113,80 @@ export class HiddenFoldersIndexer {
     }
 
     /**
-     * List hidden folders (names starting with ".") that sit at the vault root,
-     * excluding Obsidian's own config directory.
+     * List the immediate child folders of `parent`, partitioned by whether
+     * they are dot-folders (hidden by Obsidian) or regular folders.
+     *
+     * `parent` is a vault-relative path. The empty string means the vault root.
+     * Excludes Obsidian's config directory and the names in
+     * `ALWAYS_EXCLUDED_NAMES` (`.git`, `.trash`, `node_modules`) at every depth.
+     *
+     * Uses `adapter.list(parent)` directly: empirically the built-in hidden-path
+     * filter is not applied to `list()` at any depth, so dot-folders appear in
+     * the result. Returns full vault-relative paths in both arrays, sorted.
      */
-    async listHiddenRootFolders(): Promise<string[]> {
-        const listed = await this.app.vault.adapter.list('/')
+    async listChildFolders(
+        parent: string
+    ): Promise<{ dotFolders: string[]; regularFolders: string[] }> {
+        const normalizedParent = this.normalize(parent)
+        const listPath = normalizedParent === '' ? '/' : normalizedParent
         const configDir = normalizePath(this.app.vault.configDir)
-        return listed.folders
-            .map((p) => p.replace(/^\/+/, ''))
-            .filter((name) => name.startsWith('.') && name !== configDir)
-            .sort()
+
+        let listed: { folders: string[]; files: string[] }
+        try {
+            listed = await this.internalAdapter().list(listPath)
+        } catch (err) {
+            log(`Failed to list "${listPath}" for discovery`, 'warn', err)
+            return { dotFolders: [], regularFolders: [] }
+        }
+
+        const dotFolders: string[] = []
+        const regularFolders: string[] = []
+        for (const raw of listed.folders) {
+            const fullPath = this.normalize(raw)
+            const name = basenameOf(fullPath)
+            if (name === '' || name === configDir) continue
+            if (ALWAYS_EXCLUDED_NAMES.has(name)) continue
+            if (name.startsWith('.')) {
+                dotFolders.push(fullPath)
+            } else {
+                regularFolders.push(fullPath)
+            }
+        }
+
+        dotFolders.sort()
+        regularFolders.sort()
+        return { dotFolders, regularFolders }
     }
 
     /**
-     * True when `rawPath` points to an existing folder at the vault root.
-     * Uses `adapter.list('/')` because `adapter.exists`/`stat` apply the
-     * built-in hidden-path filter and would report `false` for dot-prefixed
-     * names even when they are present on disk.
+     * List hidden folders (names starting with ".") that sit at the vault root,
+     * excluding Obsidian's own config directory.
+     *
+     * Thin wrapper over `listChildFolders('')` kept for backward compatibility.
+     */
+    async listHiddenRootFolders(): Promise<string[]> {
+        const { dotFolders } = await this.listChildFolders('')
+        return dotFolders
+    }
+
+    /**
+     * True when `rawPath` points to an existing folder on disk.
+     * Lists the parent directory and checks membership rather than using
+     * `adapter.exists`/`stat`, which apply the built-in hidden-path filter
+     * and would report `false` for dot-prefixed names even when present.
      */
     async pathExistsOnDisk(rawPath: string): Promise<boolean> {
         const path = this.normalize(rawPath)
         if (path.length === 0) return false
-        const rootListing = await this.internalAdapter().list('/')
-        const available = rootListing.folders.map((p) => this.normalize(p))
-        return available.includes(path)
+        const lastSlash = path.lastIndexOf('/')
+        const parent = lastSlash === -1 ? '/' : path.slice(0, lastSlash)
+        try {
+            const parentListing = await this.internalAdapter().list(parent)
+            const available = parentListing.folders.map((p) => this.normalize(p))
+            return available.includes(path)
+        } catch {
+            return false
+        }
     }
 
     /**
