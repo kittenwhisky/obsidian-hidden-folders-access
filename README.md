@@ -1,3 +1,5 @@
+> **Fork note:** This fork extends the [upstream plugin](https://github.com/dsebastien/obsidian-hidden-folders-access) so you can select hidden dot-folders at any depth in the vault, not just at the root. The settings tab now shows a lazy expandable tree — click any regular folder to reveal nested dot-folders and toggle them on individually.
+
 # Hidden Folders Access
 
 An Obsidian plugin that makes hidden root-level folders (names starting with a dot, e.g. `.claude`, `.github`) fully visible to Obsidian — file explorer, search, graph, metadata cache, and Bases — while keeping their names hidden on disk so external tools (Claude Code, git, editors, etc.) keep working unchanged.
